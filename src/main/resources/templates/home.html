@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>首页</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card {
+            background: #fff; border-radius: 14px; padding: 48px 40px; text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18); min-width: 320px;
+        }
+        .card h1 { font-size: 24px; color: #333; margin-bottom: 12px; }
+        .card p { color: #666; margin-bottom: 10px; }
+        .card .roles { font-size: 13px; color: #999; margin-bottom: 28px; }
+        .card a {
+            display: inline-block; padding: 10px 24px; font-size: 14px; color: #667eea;
+            text-decoration: none; border: 1px solid #667eea; border-radius: 8px; cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .card a:hover { background: #667eea; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>登录成功 🎉</h1>
+        <p>欢迎回来，<strong id="username">…</strong></p>
+        <p class="roles" id="roles"></p>
+        <a id="logoutBtn">退出登录</a>
+    </div>
+
+    <script>
+        async function apiMe(token) {
+            return fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
+        }
+
+        // access token 过期时，用 refresh token 换新的
+        async function tryRefresh() {
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!refreshToken) return null;
+            const res = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken })
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            localStorage.setItem('accessToken', data.accessToken);
+            localStorage.setItem('refreshToken', data.refreshToken);
+            return data.accessToken;
+        }
+
+        function goLogin() {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            window.location.href = '/login';
+        }
+
+        async function load() {
+            let token = localStorage.getItem('accessToken');
+            if (!token) { goLogin(); return; }
+
+            let res = await apiMe(token);
+            if (res.status === 401) {
+                token = await tryRefresh();
+                if (!token) { goLogin(); return; }
+                res = await apiMe(token);
+            }
+            if (!res.ok) { goLogin(); return; }
+
+            const data = await res.json();
+            document.getElementById('username').textContent = data.username;
+            document.getElementById('roles').textContent = '角色：' + (data.roles || []).join(', ');
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', goLogin);
+        load();
+    </script>
+</body>
+</html>
