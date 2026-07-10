@@ -47,6 +47,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- OpenAPI 3 / Swagger UI (SpringDoc for Spring Boot 3) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.6.0</version>
+        </dependency>
+
         <!-- JWT (jjwt 0.12.x) -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
