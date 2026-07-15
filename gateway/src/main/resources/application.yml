@@ -8,15 +8,17 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        register-enabled: true # 可加可不加
+        namespace: 94748a86-081b-438d-99a1-b6b77e5da08b # 不加的话，默认使用的是public保留空间
     gateway:
       # 允许用 lb://服务名 做基于注册中心的负载均衡路由
       discovery:
         locator:
-          enabled: false
-      routes:
-        - id: user-service
-          uri: lb://user-service
-          predicates:
+          enabled: false # 关闭自动路由，自己配置路由，因为自动路由往往不够灵活
+      routes: # 定义路由规则，每个id就是一条路由，predicates 判断是否匹配，uri 指定路由目标
+        - id: user-service # gateway 内部表示，随便取
+          uri: lb://user-service # 不是 url，表示去nacos找名字叫 user-service 的服务，然后负载均衡
+          predicates: # 断言，判断请求是否匹配这个路由
             - Path=/api/**
         # 放行 user-service 的接口文档
         - id: user-service-docs

@@ -5,6 +5,7 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: 94748a86-081b-438d-99a1-b6b77e5da08b # 不加的话，默认使用的是public保留空间
       config:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         file-extension: yaml
