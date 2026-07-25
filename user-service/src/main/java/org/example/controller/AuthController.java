@@ -49,4 +49,11 @@ public class AuthController {
     public Result<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return Result.success(authService.refresh(request.refreshToken()));
     }
+
+    @Operation(summary = "登出", description = "吊销当前设备的 refresh token；access token 在其 15 分钟有效期内仍可用")
+    @PostMapping("/logout")
+    public Result<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        authService.logout(request.refreshToken());
+        return Result.success("已登出", null);
+    }
 }

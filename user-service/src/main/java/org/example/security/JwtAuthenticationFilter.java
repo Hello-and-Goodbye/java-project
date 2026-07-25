@@ -5,11 +5,11 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.common.security.JwtService;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -18,56 +18,54 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 每个请求执行一次：从 Authorization: Bearer <token> 解析 access token，
- * 校验通过则把认证信息放入 SecurityContext。校验失败不抛异常，交由后续的
- * 授权环节返回 401，保持无状态。
+ * 轻量验签兜底过滤器（防绕过网关直连）。
+ * <p>
+ * 只验签名 + exp + type，不查库、不查 Redis。
+ * 验通过后从 token claims 直接解出用户信息，写入 {@link UserContext}（ThreadLocal），
+ * 同时设置 Spring SecurityContext；请求结束时清理 ThreadLocal。
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final AppUserDetailsService userDetailsService;
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    public JwtAuthenticationFilter(JwtService jwtService, AppUserDetailsService userDetailsService) {
+    public JwtAuthenticationFilter(JwtService jwtService) {
         this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
     }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        String token = authHeader.substring(BEARER_PREFIX.length());
         try {
-            // 只接受 access token 用于访问受保护资源；refresh token 不能用来鉴权
-            if (jwtService.isAccessToken(token)
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
-                String username = jwtService.extractUsername(token);
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                String token = authHeader.substring(BEARER_PREFIX.length());
+                // 只接受 access token；parseSignedClaims 同时验签 + 验 exp
+                if (jwtService.isAccessToken(token)) {
+                    String username = jwtService.extractUsername(token);
+                    String role     = jwtService.extractRole(token);
+                    Long   userId   = jwtService.extractUserId(token);
 
-                String role = jwtService.extractRole(token);
-                var authorities = role != null
-                        ? List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                        : userDetails.getAuthorities();
+                    UserContext.set(new UserContext.CurrentUser(userId, username, role));
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                    var auth = new UsernamePasswordAuthenticationToken(
+                            username, null,
+                            role != null ? List.of(new SimpleGrantedAuthority("ROLE_" + role)) : List.of());
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             }
+            filterChain.doFilter(request, response);
         } catch (JwtException | IllegalArgumentException ex) {
-            // token 非法或过期：不设置认证，直接放行，后续授权会拒绝
             SecurityContextHolder.clearContext();
+            UserContext.clear();
+            filterChain.doFilter(request, response);
+        } finally {
+            UserContext.clear();
         }
-
-        filterChain.doFilter(request, response);
     }
 }

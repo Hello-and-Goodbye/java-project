@@ -14,6 +14,12 @@
     <!-- API 网关：统一入口，基于 Nacos 服务发现路由到各业务服务 -->
 
     <dependencies>
+        <!-- 公共模块：复用 JwtService(验签) 与统一返回体 -->
+        <dependency>
+            <groupId>org.example</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+
         <!-- Spring Cloud Gateway（基于 WebFlux，勿引入 spring-boot-starter-web） -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
