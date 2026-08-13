@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.common.log.TraceContext;
 import org.example.common.security.JwtService;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -51,6 +52,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     Long   userId   = jwtService.extractUserId(token);
 
                     UserContext.set(new UserContext.CurrentUser(userId, username, role));
+                    // 写入 MDC，使后续业务日志自动带上 userId，无需每条手动拼
+                    TraceContext.setUserId(userId == null ? username : String.valueOf(userId));
 
                     var auth = new UsernamePasswordAuthenticationToken(
                             username, null,

@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  日志体系共享基线，由各服务的 logback-spring.xml 通过 <include> 引入。
+
+  约定的外部变量(引入方需先定义)：
+    APP_NAME  服务名，用于日志目录与 JSON 字段
+    LOG_HOME  日志根目录
+
+  分文件策略：
+    ${APP_NAME}.log        全量业务日志(INFO 及以上)
+    ${APP_NAME}-error.log  仅 ERROR，便于告警与快速定位
+    ${APP_NAME}-access.log 访问日志(logger 名 ACCESS)，用于统计 QPS/耗时
+    ${APP_NAME}-json.log   结构化日志，供 ELK/Loki 采集
+
+  滚动策略统一 SizeAndTimeBased：按天切分 + 单文件上限，避免单日暴涨产生超大文件。
+-->
+<included>
+
+    <!--
+      引入 Spring Boot 的 logback 默认定义。必须放在最前：
+      %clr(着色) 与 %wEx(收敛后的异常栈) 这两个转换词由它注册，
+      不引入会报 "no conversion class registered for conversion word [wEx]"。
+    -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- 脱敏转换器：pattern 中用 %maskedMsg 替代 %msg 即全局生效 -->
+    <conversionRule conversionWord="maskedMsg"
+                    converterClass="org.example.common.log.SensitiveMaskingConverter"/>
+
+    <!-- 保留天数与单文件上限：生产按需调整，避免磁盘被日志打满 -->
+    <property name="MAX_HISTORY" value="30"/>
+    <property name="MAX_FILE_SIZE" value="100MB"/>
+    <property name="TOTAL_SIZE_CAP" value="10GB"/>
+
+    <!-- 控制台带颜色，便于本地开发阅读 -->
+    <property name="CONSOLE_PATTERN"
+              value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr([${APP_NAME:-},%X{traceId:-},%X{spanId:-}]){yellow} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %maskedMsg%n%wEx"/>
+
+    <!-- 文件不带颜色控制符，否则 grep / 采集端会混入乱码 -->
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${APP_NAME:-},%X{traceId:-},%X{spanId:-}] [%thread] %-40.40logger{39} : %maskedMsg%n%wEx"/>
+
+    <property name="ACCESS_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [${APP_NAME:-},%X{traceId:-}] ip=%X{clientIp:--} uid=%X{userId:--} %maskedMsg%n"/>
+
+    <!-- ============ 控制台 ============ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!--
+      文件类 appender 必须包在 springProfile 内。
+      logback 在<b>解析阶段</b>就会实例化 appender 并打开文件句柄，
+      与它是否被 root/logger 引用无关——若定义在顶层，dev 环境也会凭空生成日志文件。
+    -->
+    <springProfile name="test,prod">
+
+    <!-- ============ 全量业务日志 ============ -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/history/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <!-- 启动时清理过期文件，否则服务长期不重启会残留 -->
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============ 仅 ERROR ============ -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}-error.log</file>
+        <!-- LevelFilter 只放行 ERROR，与 ThresholdFilter(>=) 不同 -->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/history/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============ 访问日志 ============ -->
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}-access.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/history/${APP_NAME}-access.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${ACCESS_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============ 结构化 JSON(供采集) ============ -->
+    <!--
+      用 logstash-logback-encoder 的 composite encoder：JSON 转义由它保证，
+      不必手写 %replace 处理引号/反斜杠/换行(极易出错)。
+      message 字段走 pattern provider，从而复用 %maskedMsg 的脱敏能力。
+    -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}-json.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/history/${APP_NAME}-json.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>@timestamp</fieldName>
+                    <timeZone>Asia/Shanghai</timeZone>
+                </timestamp>
+                <logLevel><fieldName>level</fieldName></logLevel>
+                <loggerName><fieldName>logger</fieldName><shortenedLoggerNameLength>40</shortenedLoggerNameLength></loggerName>
+                <threadName><fieldName>thread</fieldName></threadName>
+                <!-- MDC 全量输出：traceId / spanId / userId / clientIp -->
+                <mdc/>
+                <!-- 走 pattern 以复用脱敏转换器 -->
+                <pattern>
+                    <pattern>{"service":"${APP_NAME:-}","message":"%maskedMsg"}</pattern>
+                </pattern>
+                <stackTrace><fieldName>stack</fieldName></stackTrace>
+            </providers>
+        </encoder>
+    </appender>
+
+    <!-- ============ 异步包装 ============ -->
+    <!--
+      日志写盘是阻塞 IO，同步写会拖慢业务线程。异步的代价是进程崩溃时队列内日志丢失，
+      因此：discardingThreshold=0 表示队列满时也不丢弃 WARN/ERROR(默认会丢 INFO 及以下)，
+      neverBlock=false 表示队列满时阻塞而非丢日志——宁可慢一点也不丢关键日志。
+    -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <!-- 保留调用方信息会显著增加开销，仅在需要 %file/%line 时开启 -->
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <appender name="ASYNC_ERROR_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>2048</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="ERROR_FILE"/>
+    </appender>
+
+    <appender name="ASYNC_ACCESS_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="ACCESS_FILE"/>
+    </appender>
+
+    <appender name="ASYNC_JSON_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="JSON_FILE"/>
+    </appender>
+
+    <!-- ============ 访问日志 logger ============ -->
+    <!-- additivity=false：只进访问日志文件，不重复写入业务日志 -->
+    <logger name="ACCESS" level="INFO" additivity="false">
+        <appender-ref ref="ASYNC_ACCESS_FILE"/>
+    </logger>
+
+    </springProfile>
+
+    <!-- 本地开发：访问日志走控制台，便于边调边看，且不产生日志文件 -->
+    <springProfile name="dev,default">
+        <logger name="ACCESS" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+    </springProfile>
+
+    <!-- ============ 第三方框架降噪 ============ -->
+    <!-- 这些包在 INFO 级别会产生大量无价值日志，统一压到 WARN -->
+    <logger name="org.apache.catalina" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+    <logger name="org.apache.coyote" level="WARN"/>
+    <logger name="com.alibaba.nacos" level="WARN"/>
+    <logger name="com.alibaba.nacos.client.naming" level="ERROR"/>
+    <logger name="com.alibaba.nacos.common.remote.client" level="ERROR"/>
+    <logger name="io.lettuce.core.protocol" level="WARN"/>
+    <logger name="org.springframework.boot.autoconfigure" level="WARN"/>
+    <logger name="springfox" level="WARN"/>
+    <logger name="_org.springframework.web" level="WARN"/>
+
+</included>

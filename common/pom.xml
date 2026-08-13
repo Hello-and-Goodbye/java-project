@@ -58,6 +58,21 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- logback：SensitiveMaskingConverter 继承 logback 的 MessageConverter，
+             编译期需要；运行时由各服务的 spring-boot-starter-logging 提供 -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 结构化 JSON 日志编码器(ELK/Loki 采集)。非 optional：
+             logback-base.xml 中 JSON appender 需要它在运行时存在 -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.0</version>
+        </dependency>
+
         <!-- JWT (jjwt 0.12.x)：JwtService 下沉 common，供网关与各业务服务共用验签 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

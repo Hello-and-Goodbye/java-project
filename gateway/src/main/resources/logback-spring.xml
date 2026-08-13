@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  gateway 日志配置。
+
+  与 user-service 的差别：
+  1. 不注册 ACCESS logger 之外的 Servlet 相关内容——gateway 基于 WebFlux，
+     访问日志由响应式 TraceWebFilter 输出，同样使用 ACCESS logger 名。
+  2. 额外降噪 reactor / netty 的调试日志。
+-->
+<configuration scan="false">
+
+    <property name="APP_NAME" value="gateway"/>
+    <property name="LOG_HOME" value="${LOG_HOME:-./logs/gateway}"/>
+
+    <include resource="logback/logback-base.xml"/>
+
+    <!-- WebFlux / Netty 降噪：INFO 级别下会输出大量连接与帧信息 -->
+    <logger name="reactor.netty" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+    <logger name="reactor.core.publisher" level="WARN"/>
+
+    <springProfile name="dev,default">
+        <logger name="org.example" level="DEBUG"/>
+        <!-- 排查路由不生效时打开：会打印每个请求的路由匹配过程 -->
+        <logger name="org.springframework.cloud.gateway" level="DEBUG"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="test">
+        <logger name="org.example" level="DEBUG"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <logger name="org.example" level="INFO"/>
+        <logger name="org.springframework.cloud.gateway" level="WARN"/>
+
+        <root level="INFO">
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+            <appender-ref ref="ASYNC_JSON_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

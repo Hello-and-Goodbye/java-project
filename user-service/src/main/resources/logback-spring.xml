@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  user-service 日志配置。
+  文件名必须是 logback-spring.xml(而非 logback.xml)，否则 <springProfile> 不生效
+  —— 后者由 logback 直接加载，早于 Spring 环境就绪。
+-->
+<configuration scan="false">
+
+    <!-- 服务名与日志目录：LOG_HOME 支持环境变量覆盖，容器部署时挂载到宿主盘 -->
+    <property name="APP_NAME" value="user-service"/>
+    <property name="LOG_HOME" value="${LOG_HOME:-./logs/user-service}"/>
+
+    <!-- 引入共享基线(appender / 脱敏规则 / 框架降噪) -->
+    <include resource="logback/logback-base.xml"/>
+
+    <!-- ============ 本地开发 ============ -->
+    <!-- 只打控制台，不落盘：避免本地产生大量日志文件 -->
+    <springProfile name="dev,default">
+        <logger name="org.example" level="DEBUG"/>
+        <!-- 开发期常用：查看 SQL 与绑定参数 -->
+        <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
+        <logger name="org.springframework.security" level="DEBUG"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ============ 测试环境 ============ -->
+    <springProfile name="test">
+        <logger name="org.example" level="DEBUG"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- ============ 生产环境 ============ -->
+    <!--
+      生产不打控制台：stdout 在容器中会被再次收集，等于日志双写，浪费 IO 与磁盘。
+      若采用 stdout 采集方案(如 K8s + Fluent Bit)，则反过来只留 CONSOLE。
+    -->
+    <springProfile name="prod">
+        <logger name="org.example" level="INFO"/>
+        <!-- 生产禁止打开 SQL 日志：量大且可能含敏感参数 -->
+        <logger name="org.hibernate.SQL" level="WARN"/>
+        <logger name="org.springframework.security" level="WARN"/>
+
+        <root level="INFO">
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+            <appender-ref ref="ASYNC_JSON_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

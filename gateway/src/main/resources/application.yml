@@ -1,6 +1,14 @@
 server:
   port: 9000
 
+# JWT：网关做统一验签，密钥必须与 user-service 完全一致，否则无法互验签名。
+# 生产环境务必用环境变量注入，不要把真实密钥提交进仓库。
+app:
+  jwt:
+    secret: ${JWT_SECRET:Zm9vYmFyLXN1cGVyLXNlY3JldC1rZXktZm9yLWp3dC1obWFjLXNoYTI1Ni1jaGFuZ2VtZQ==}
+    access-expiration: 900000
+    refresh-expiration: 604800000
+
 spring:
   application:
     name: gateway

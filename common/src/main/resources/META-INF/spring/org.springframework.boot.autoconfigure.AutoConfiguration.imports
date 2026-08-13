@@ -1,1 +1,2 @@
 org.example.common.security.JwtAutoConfiguration
+org.example.common.log.LogAutoConfiguration

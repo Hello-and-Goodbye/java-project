@@ -32,8 +32,12 @@ build/
 ### VS Code ###
 .vscode/
 
+### 日志文件：本地运行产物，不入库 ###
+logs/
+*.log
+*.log.gz
+
 ### Mac OS ###
 .DS_Store
 /.idea/
 /.mvn/
-/.claude/
